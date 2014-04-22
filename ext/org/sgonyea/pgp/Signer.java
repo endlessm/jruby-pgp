@@ -154,6 +154,12 @@ public class Signer {
 
 		armoredSignatureOutputStream.close();
 
-		return new String(signatureByteArrayOutputStream.toByteArray());
+		String signatureString = new String(signatureByteArrayOutputStream.toByteArray());
+		
+		signatureByteArrayOutputStream.close();
+		
+		pgpOutputStream.close();
+		
+		return signatureString;
 	}
 }
