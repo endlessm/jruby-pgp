@@ -17,4 +17,4 @@ test/version_tmp
 tmp
 
 # Skip our compiled jruby-pgp.jar
-lib/pgp/jruby-pgp.jar
+# lib/pgp/jruby-pgp.jar
