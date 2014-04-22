@@ -10,124 +10,150 @@
 
 package org.sgonyea.pgp;
 
-import java.io.ByteArrayInputStream;
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.NoSuchProviderException;
-import java.security.SecureRandom;
-import java.security.Security;
-import java.util.Date;
 import java.util.Iterator;
 
-import org.bouncycastle.bcpg.BCPGOutputStream;
 import org.bouncycastle.bcpg.ArmoredOutputStream;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.openpgp.*;
+import org.bouncycastle.bcpg.BCPGOutputStream;
+import org.bouncycastle.openpgp.PGPCompressedData;
+import org.bouncycastle.openpgp.PGPCompressedDataGenerator;
+import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.PGPLiteralData;
+import org.bouncycastle.openpgp.PGPLiteralDataGenerator;
+import org.bouncycastle.openpgp.PGPPrivateKey;
+import org.bouncycastle.openpgp.PGPSecretKey;
+import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.PGPSecretKeyRingCollection;
+import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.PGPSignatureGenerator;
+import org.bouncycastle.openpgp.PGPSignatureSubpacketGenerator;
+import org.bouncycastle.openpgp.PGPUtil;
 import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentSignerBuilder;
-import org.bouncycastle.openpgp.operator.jcajce.JcaPGPContentVerifierBuilderProvider;
 import org.bouncycastle.openpgp.operator.jcajce.JcePBESecretKeyDecryptorBuilder;
 
 public class Signer {
+	private String passphrase;
+	private PGPSecretKeyRingCollection _privateKeys;
 
-  private PGPSecretKeyRingCollection _privateKeys;
+	public Signer() {
+	}
 
-  private String passphrase;
+	public Signer(PGPSecretKeyRingCollection privateKeys) {
+		setPrivateKeys(privateKeys);
+	}
 
-  public Signer() { }
-  public Signer(PGPSecretKeyRingCollection privateKeys) {
-    setPrivateKeys(privateKeys);
-  }
+	/**
+	 * Accessor and Attribute Helper Methods
+	 **/
+	public PGPSecretKeyRingCollection getPrivateKeys() {
+		return _privateKeys;
+	}
 
-  /**
-   * Accessor and Attribute Helper Methods
-  **/
-  public PGPSecretKeyRingCollection getPrivateKeys() {
-    return _privateKeys;
-  }
+	public void setPrivateKeys(PGPSecretKeyRingCollection privateKeys) {
+		_privateKeys = privateKeys;
+	}
 
-  public void setPrivateKeys(PGPSecretKeyRingCollection privateKeys) {
-    _privateKeys = privateKeys;
-  }
+	public void setPassphrase(String passphrase) {
+		this.passphrase = passphrase;
+	}
 
-  public void setPassphrase(String passphrase) {
-    this.passphrase = passphrase;
-  }
+	private PGPSecretKey findSecretKey() throws PGPException, NoSuchProviderException {
+		@SuppressWarnings("rawtypes")
+		Iterator keyRingIter = _privateKeys.getKeyRings();
+		while (keyRingIter.hasNext()) {
+			PGPSecretKeyRing keyRing = (PGPSecretKeyRing) keyRingIter.next();
 
-  private PGPSecretKey findSecretKey()
-    throws PGPException, NoSuchProviderException {
-    Iterator keyRingIter = _privateKeys.getKeyRings();
-    while (keyRingIter.hasNext())
-    {
-        PGPSecretKeyRing keyRing = (PGPSecretKeyRing)keyRingIter.next();
+			@SuppressWarnings("rawtypes")
+			Iterator keyIter = keyRing.getSecretKeys();
+			while (keyIter.hasNext()) {
+				PGPSecretKey key = (PGPSecretKey) keyIter.next();
 
-        Iterator keyIter = keyRing.getSecretKeys();
-        while (keyIter.hasNext())
-        {
-            PGPSecretKey key = (PGPSecretKey)keyIter.next();
+				if (key.isSigningKey()) {
+					return key;
+				}
+			}
+		}
 
-            if (key.isSigningKey())
-            {
-                return key;
-            }
-        }
-    }
+		throw new IllegalArgumentException("Can't find signing key in key ring.");
+	}
 
-    throw new IllegalArgumentException("Can't find signing key in key ring.");
-  }
+	public byte[] signData(byte[] inputData) throws Exception {
+		ByteArrayOutputStream signatureByteArrayOutputStream = new ByteArrayOutputStream();
+		ArmoredOutputStream armoredSignatureOutputStream = new ArmoredOutputStream(signatureByteArrayOutputStream);
 
-  public byte[] signData(byte[] clearData)
-    throws Exception {
-      String fileName = "something.txt";
-      ByteArrayOutputStream bos = new ByteArrayOutputStream();
-      ArmoredOutputStream out = new ArmoredOutputStream(bos);
+		PGPSecretKey pgpSigningKey = findSecretKey();
+		PGPPrivateKey pgpPrivateKey = pgpSigningKey.extractPrivateKey(new JcePBESecretKeyDecryptorBuilder()
+				.setProvider("BC").build(passphrase.toCharArray()));
+		PGPSignatureGenerator signatureGenerator = new PGPSignatureGenerator(new JcaPGPContentSignerBuilder(
+				pgpSigningKey.getPublicKey().getAlgorithm(), PGPUtil.SHA1).setProvider("BC"));
 
-      PGPSecretKey                pgpSec = findSecretKey();
-      PGPPrivateKey               pgpPrivKey = pgpSec.extractPrivateKey(new JcePBESecretKeyDecryptorBuilder().setProvider("BC").build(passphrase.toCharArray()));
-      PGPSignatureGenerator       sGen = new PGPSignatureGenerator(new JcaPGPContentSignerBuilder(pgpSec.getPublicKey().getAlgorithm(), PGPUtil.SHA1).setProvider("BC"));
+		signatureGenerator.init(PGPSignature.BINARY_DOCUMENT, pgpPrivateKey);
 
-      sGen.init(PGPSignature.BINARY_DOCUMENT, pgpPrivKey);
+		@SuppressWarnings("rawtypes")
+		Iterator iter = pgpSigningKey.getPublicKey().getUserIDs();
+		if (iter.hasNext()) {
+			PGPSignatureSubpacketGenerator subpacketGenerator = new PGPSignatureSubpacketGenerator();
 
-      Iterator    it = pgpSec.getPublicKey().getUserIDs();
-      if (it.hasNext())
-      {
-          PGPSignatureSubpacketGenerator  spGen = new PGPSignatureSubpacketGenerator();
+			subpacketGenerator.setSignerUserID(false, (String) iter.next());
+			signatureGenerator.setHashedSubpackets(subpacketGenerator.generate());
+		}
 
-          spGen.setSignerUserID(false, (String)it.next());
-          sGen.setHashedSubpackets(spGen.generate());
-      }
+		PGPCompressedDataGenerator compressor = new PGPCompressedDataGenerator(PGPCompressedData.ZLIB);
 
-      PGPCompressedDataGenerator  cGen = new PGPCompressedDataGenerator(
-                                                              PGPCompressedData.ZLIB);
+		BCPGOutputStream pgpOutputStream = new BCPGOutputStream(compressor.open(armoredSignatureOutputStream));
 
-      BCPGOutputStream            bOut = new BCPGOutputStream(cGen.open(out));
+		signatureGenerator.generateOnePassVersion(false).encode(pgpOutputStream);
 
-      sGen.generateOnePassVersion(false).encode(bOut);
+		PGPLiteralDataGenerator literalDataGenerator = new PGPLiteralDataGenerator();
+		OutputStream literalDataGeneratorOutputStream = literalDataGenerator.open(pgpOutputStream,
+				PGPLiteralData.BINARY, PGPLiteralDataGenerator.CONSOLE, inputData.length, PGPLiteralDataGenerator.NOW);
 
-      File                        file = new File(fileName);
-      PGPLiteralDataGenerator     lGen = new PGPLiteralDataGenerator();
-      OutputStream                lOut = lGen.open(bOut,
-        PGPLiteralData.BINARY, PGPLiteralDataGenerator.CONSOLE,
-        clearData.length, PGPLiteralDataGenerator.NOW);
-      int                         ch;
+		literalDataGeneratorOutputStream.write(inputData);
+		signatureGenerator.update(inputData);
 
-      lOut.write(clearData);
-      sGen.update(clearData);
+		literalDataGenerator.close();
 
-      lGen.close();
+		signatureGenerator.generate().encode(pgpOutputStream);
 
-      sGen.generate().encode(bOut);
+		compressor.close();
 
-      cGen.close();
+		armoredSignatureOutputStream.close();
 
-      out.close();
+		return signatureByteArrayOutputStream.toByteArray();
+	}
 
-      return bos.toByteArray();
-  }
+	public String signDataDetached(String inputFileName) throws Exception {
+		ByteArrayOutputStream signatureByteArrayOutputStream = new ByteArrayOutputStream();
+		ArmoredOutputStream armoredSignatureOutputStream = new ArmoredOutputStream(signatureByteArrayOutputStream);
 
+		PGPSecretKey pgpSigningKey = findSecretKey();
+		PGPPrivateKey pgpPrivateKey = pgpSigningKey.extractPrivateKey(new JcePBESecretKeyDecryptorBuilder()
+				.setProvider("BC").build(passphrase.toCharArray()));
+		PGPSignatureGenerator signatureGenerator = new PGPSignatureGenerator(new JcaPGPContentSignerBuilder(
+				pgpSigningKey.getPublicKey().getAlgorithm(), PGPUtil.SHA1).setProvider("BC"));
 
+		signatureGenerator.init(PGPSignature.BINARY_DOCUMENT, pgpPrivateKey);
+
+		BCPGOutputStream pgpOutputStream = new BCPGOutputStream(armoredSignatureOutputStream);
+
+		InputStream inputFileInputStream = new BufferedInputStream(new FileInputStream(inputFileName));
+
+		int ch;
+		while ((ch = inputFileInputStream.read()) >= 0) {
+			signatureGenerator.update((byte) ch);
+		}
+
+		signatureGenerator.generate().encode(pgpOutputStream);
+
+		inputFileInputStream.close();
+
+		armoredSignatureOutputStream.close();
+
+		return new String(signatureByteArrayOutputStream.toByteArray());
+	}
 }
