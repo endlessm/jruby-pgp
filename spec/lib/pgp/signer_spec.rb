@@ -12,6 +12,7 @@ describe PGP::Signer do
   end
 
   let(:unsigned_file) { Fixtures_Path.join('signed_file.txt') }
+  let(:unencrypted_file) { Fixtures_Path.join('unencrypted_file.txt') }
   let(:unsigned_data) { File.read(unsigned_file)}
   let(:signed_file) { Fixtures_Path.join('signed_file.txt.asc') }
   let(:verifier) do
@@ -21,11 +22,16 @@ describe PGP::Signer do
   end
 
   describe '#sign' do
-
     it "signs" do
       verifier.verify(signer.sign(unsigned_data)).should == unsigned_data
     end
+  end
 
+  describe '#sign_detached' do
+    it "signs" do
+      signature = signer.sign_detached(unencrypted_file)
+      verifier.verify_detached(unencrypted_file, signature).should == true
+    end
   end
 
   describe "encrypting and signing" do
@@ -40,5 +46,4 @@ describe PGP::Signer do
       verifier.verify(decryptor.decrypt(encryptor.encrypt(signer.sign("something fabulous")))).should == "something fabulous"
     end
   end
-
 end
