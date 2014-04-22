@@ -30,7 +30,7 @@ describe PGP::Signer do
   describe '#sign_detached' do
     it "signs" do
       signature = signer.sign_detached(unencrypted_file)
-      verifier.verify_detached(unencrypted_file, signature).should == true
+      verifier.verify_detached(signature, unencrypted_file).should == true
     end
   end
 

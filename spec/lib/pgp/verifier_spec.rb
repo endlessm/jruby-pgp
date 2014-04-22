@@ -37,7 +37,7 @@ describe PGP::Verifier do
 
     context 'When the public key is from a file' do
       it "verifies" do
-        verifier.verify_detached(unsigned_file, File.read(file_signature)).should == true
+        verifier.verify_detached(File.read(file_signature), unsigned_file).should == true
       end
     end
 
@@ -46,7 +46,7 @@ describe PGP::Verifier do
 
       it "should raise an exception" do
         expect {
-          verifier.verify_detached(unsigned_file, File.read(file_signature))
+          verifier.verify_detached(File.read(file_signature), unsigned_file)
         }.to raise_exception(org.sgonyea.pgp.VerificationFailedException, /ID.*could not be found/)
       end
     end

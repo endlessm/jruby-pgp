@@ -16,9 +16,9 @@ module PGP
       String.from_java_bytes(verified_data)
     end
 
-    def verify_detached(filename, signature)
+    def verify_detached(signature, filename)
       # Ruby bug JRUBY-6389
-      verify_detached_signature(filename.to_s, signature.to_s)
+      verify_detached_signature(signature.to_s, filename.to_s)
     end
 
     def decrypt_file(file_path)
